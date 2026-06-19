@@ -3,36 +3,39 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Colab Console — Discourse Marketing Tool</title>
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src https:; img-src 'self' data:; base-uri 'none'; form-action 'none'" />
+  <title>Discourse Marketing Console</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
       <span class="dot"></span>
-      <strong>Colab Console</strong>
-      <span class="sub">Discourse marketing toolkit</span>
+      <strong>Marketing Console</strong>
+      <span class="sub">for Discourse</span>
     </div>
     <div class="topbar-right">
+      <span id="roleBadge" class="pill pill-muted" hidden></span>
       <span id="connStatus" class="pill pill-muted">Not connected</span>
-      <button id="openSettings" class="btn btn-ghost">⚙ Settings</button>
+      <button id="openSettings" class="btn btn-ghost">⚙ Connection</button>
     </div>
   </header>
 
-  <!-- Acting-as bar -->
-  <div class="actbar" id="actbar">
+  <!-- Acting-as bar (admin mode only) -->
+  <div class="actbar admin-only" id="actbar" hidden>
     <label>Acting as</label>
     <select id="actAsUser"><option value="">— admin (default) —</option></select>
     <button id="refreshUsers" class="btn btn-ghost btn-sm">↻ users</button>
-    <span class="actbar-hint">Posts, replies & likes are attributed to this user.</span>
+    <span class="actbar-hint">Admin only · posts, replies &amp; likes are attributed to this user.</span>
   </div>
 
   <nav class="tabs" id="tabs">
     <button class="tab active" data-tab="feed">Browse</button>
     <button class="tab" data-tab="topic">New Topic</button>
     <button class="tab" data-tab="reply">Reply</button>
-    <button class="tab" data-tab="category">Category</button>
-    <button class="tab" data-tab="user">New User</button>
+    <button class="tab admin-only" data-tab="category" hidden>Category</button>
+    <button class="tab admin-only" data-tab="user" hidden>New User</button>
     <button class="tab" data-tab="message">Message</button>
     <button class="tab" data-tab="moderate">Moderate</button>
   </nav>
@@ -58,7 +61,7 @@
     <!-- NEW TOPIC -->
     <section class="panel" id="tab-topic">
       <h2>Create a topic</h2>
-      <p class="muted">Posted as the <em>Acting as</em> user.</p>
+      <p class="muted" id="topicAs">Posted as the connected user.</p>
       <div class="field">
         <label>Category</label>
         <select id="topicCategory"></select>
@@ -77,7 +80,7 @@
     <!-- REPLY -->
     <section class="panel" id="tab-reply">
       <h2>Reply to a topic</h2>
-      <p class="muted">Posted as the <em>Acting as</em> user.</p>
+      <p class="muted" id="replyAs">Posted as the connected user.</p>
       <div class="field">
         <label>Topic ID</label>
         <input id="replyTopicId" type="number" placeholder="e.g. 683" />
@@ -95,7 +98,7 @@
       <button id="submitReply" class="btn btn-primary">Post reply</button>
     </section>
 
-    <!-- CATEGORY -->
+    <!-- CATEGORY (admin) -->
     <section class="panel" id="tab-category">
       <h2>Create a category</h2>
       <div class="field">
@@ -123,7 +126,7 @@
       <button id="submitCategory" class="btn btn-primary">Create category</button>
     </section>
 
-    <!-- NEW USER -->
+    <!-- NEW USER (admin) -->
     <section class="panel" id="tab-user">
       <h2>Create a user</h2>
       <p class="muted">Created active &amp; approved. Use for new personas.</p>
@@ -145,7 +148,7 @@
     <!-- MESSAGE -->
     <section class="panel" id="tab-message">
       <h2>Send a private message</h2>
-      <p class="muted">Sent as the <em>Acting as</em> user.</p>
+      <p class="muted">Sent as the connected user.</p>
       <div class="field">
         <label>Recipients (comma-separated usernames)</label>
         <input id="msgRecipients" type="text" placeholder="lydia_chen, klara_novak" />
@@ -164,6 +167,7 @@
     <!-- MODERATE -->
     <section class="panel" id="tab-moderate">
       <h2>Moderate &amp; engage</h2>
+      <p class="muted">Editing/deleting others' posts needs admin or moderator. Normal users can act on their own posts.</p>
       <div class="card">
         <h3>Like a post</h3>
         <div class="field inline">
@@ -194,37 +198,75 @@
 
   </main>
 
-  <!-- Settings modal -->
+  <!-- Connection modal -->
   <div class="modal-backdrop" id="settingsModal" hidden>
     <div class="modal">
-      <h2>Connection settings</h2>
+      <h2>Connect to Discourse</h2>
+
       <div class="field">
         <label>Discourse URL</label>
-        <input id="cfgUrl" type="text" placeholder="https://colab.blend-ed.com" />
+        <input id="cfgUrl" type="text" placeholder="https://your-forum.com" />
       </div>
-      <div class="field">
-        <label>Admin API key</label>
-        <input id="cfgKey" type="password" placeholder="Admin → API → global key" />
-        <small class="muted">Stored only in this browser (localStorage). Never uploaded.</small>
+
+      <div class="methodtabs">
+        <button class="mtab active" data-method="account">My account (seamless)</button>
+        <button class="mtab" data-method="admin">Admin API key</button>
       </div>
-      <div class="field">
-        <label>Admin username</label>
-        <input id="cfgAdmin" type="text" placeholder="nihxdr" />
+
+      <!-- Account / User-API-Key method -->
+      <div class="method active" id="method-account">
+        <p class="muted">Connect as yourself — no admin key. You'll approve scoped access
+          on your own forum. Best for normal members. <b>Impersonating other users,
+          creating categories or users requires the Admin key method.</b></p>
+        <button id="genAuthLink" class="btn">1 · Open authorization page</button>
+        <p class="muted" id="authHint" style="display:none">
+          Approve on your forum, copy the code it shows, paste below.</p>
+        <div class="field">
+          <label>2 · Paste the authorization code</label>
+          <textarea id="userApiPayload" rows="4" placeholder="paste the code your forum displays…"></textarea>
+        </div>
+        <button id="connectAccount" class="btn btn-primary">3 · Connect</button>
       </div>
-      <div class="modal-actions">
-        <button id="testConn" class="btn btn-ghost">Test connection</button>
-        <span id="testResult" class="muted"></span>
+
+      <!-- Admin key method -->
+      <div class="method" id="method-admin">
+        <p class="muted">Full access incl. impersonation, category &amp; user creation.
+          Use a global admin key. Treat it like a root password.</p>
+        <div class="field">
+          <label>Admin API key</label>
+          <input id="cfgKey" type="password" placeholder="Admin → API → global key" />
+        </div>
+        <div class="field">
+          <label>Admin username</label>
+          <input id="cfgAdmin" type="text" placeholder="system" />
+        </div>
+        <div class="modal-actions">
+          <button id="testConn" class="btn btn-ghost">Test connection</button>
+          <span id="testResult" class="muted"></span>
+        </div>
+        <button id="connectAdmin" class="btn btn-primary">Connect</button>
       </div>
+
+      <label class="remember">
+        <input type="checkbox" id="cfgRemember" />
+        Remember on this device (otherwise cleared when the tab closes)
+      </label>
+
       <div class="modal-actions end">
+        <button id="disconnectBtn" class="btn btn-ghost" hidden>Disconnect &amp; clear</button>
         <button id="closeSettings" class="btn btn-ghost">Close</button>
-        <button id="saveSettings" class="btn btn-primary">Save</button>
       </div>
+      <p class="muted tiny">Your key stays in this browser only. This app has no backend —
+        requests go straight to your Discourse. Source:
+        <a href="https://github.com/nihxdr/discourse-marketing-console" target="_blank" rel="noopener">GitHub</a>.</p>
     </div>
   </div>
 
-  <!-- Toast -->
   <div id="toast" class="toast" hidden></div>
 
+  <script src="vendor/jsencrypt.min.js"
+          integrity="sha384-FwzUI3CDdHbj2MEKbnjj0eCvB+gYurE3x3pW/udNFOVUbrCrl3REWMQ1FBTolvoj"
+          crossorigin="anonymous"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -1,40 +1,68 @@
-/* Colab Console — static Discourse marketing toolkit.
- * All Discourse calls run from the browser using an admin API key the user
- * pastes in Settings. Key lives only in localStorage; nothing is committed. */
+/* Discourse Marketing Console — static, no backend.
+ *
+ * Two connection modes:
+ *   - 'admin' : Api-Key + Api-Username headers. Full power incl. impersonation,
+ *               category/user creation. Key is a global admin key.
+ *   - 'user'  : User-Api-Key header from Discourse's User-API-Key handshake.
+ *               Acts as the connected member, with that member's permissions.
+ *
+ * The connected account's role (admin/mod/normal) gates which features show.
+ * Credentials live only in this browser (sessionStorage by default, or
+ * localStorage when "remember" is checked). Nothing transits any backend. */
 
-const LS_KEY = 'colab_console_cfg';
+const STORE_KEY = 'dmc_cfg';
 
 const cfg = {
+  mode: '',          // 'admin' | 'user'
   url: '',
-  key: '',
-  admin: '',
+  key: '',           // admin api key
+  admin: '',         // admin username (admin mode)
+  userApiKey: '',    // user-api-key (user mode)
+  username: '',      // resolved connected username
+  isAdmin: false,
+  isMod: false,
+  clientId: '',      // stable per-device id for user-api-key revocation
+  remember: false,
 };
 
-// ─── config persistence ────────────────────────────────────────────────
+// ─── storage ───────────────────────────────────────────────────────────
+function persist() {
+  const store = cfg.remember ? localStorage : sessionStorage;
+  const other = cfg.remember ? sessionStorage : localStorage;
+  store.setItem(STORE_KEY, JSON.stringify(cfg));
+  other.removeItem(STORE_KEY);
+}
 function loadCfg() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
-    Object.assign(cfg, saved);
-  } catch (_) {}
+  let raw = sessionStorage.getItem(STORE_KEY) || localStorage.getItem(STORE_KEY);
+  if (raw) { try { Object.assign(cfg, JSON.parse(raw)); } catch (_) {} }
+  if (!cfg.clientId) cfg.clientId = randHex(16);
 }
-function saveCfg() {
-  localStorage.setItem(LS_KEY, JSON.stringify(cfg));
+function clearCfg() {
+  sessionStorage.removeItem(STORE_KEY);
+  localStorage.removeItem(STORE_KEY);
+  Object.assign(cfg, {
+    mode: '', key: '', admin: '', userApiKey: '', username: '',
+    isAdmin: false, isMod: false,
+  });
 }
-function configured() {
-  return cfg.url && cfg.key && cfg.admin;
+function connected() {
+  return cfg.url && ((cfg.mode === 'admin' && cfg.key) || (cfg.mode === 'user' && cfg.userApiKey));
 }
 
 // ─── API core ──────────────────────────────────────────────────────────
 function headers(asUser) {
-  return {
-    'Api-Key': cfg.key,
-    'Api-Username': asUser || actingUser() || cfg.admin,
-    'Content-Type': 'application/json',
-  };
+  const h = { 'Content-Type': 'application/json' };
+  if (cfg.mode === 'admin') {
+    h['Api-Key'] = cfg.key;
+    h['Api-Username'] = asUser || actingUser() || cfg.admin || 'system';
+  } else {
+    h['User-Api-Key'] = cfg.userApiKey;   // bound to the user; no impersonation
+  }
+  return h;
 }
 
 async function api(method, path, body, asUser) {
-  if (!configured()) throw new Error('Not configured — open Settings first.');
+  if (!connected()) throw new Error('Not connected — open Connection first.');
   const opts = { method, headers: headers(asUser) };
   if (body !== undefined) opts.body = JSON.stringify(body);
   const res = await fetch(cfg.url.replace(/\/$/, '') + path, opts);
@@ -49,17 +77,22 @@ async function api(method, path, body, asUser) {
   }
   return data;
 }
-
 const apiGet = (p, asUser) => api('GET', p, undefined, asUser);
 const apiPost = (p, b, asUser) => api('POST', p, b, asUser);
 const apiPut = (p, b, asUser) => api('PUT', p, b, asUser);
 const apiDelete = (p, b) => api('DELETE', p, b);
 
-// ─── small helpers ─────────────────────────────────────────────────────
+// ─── helpers ───────────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id);
 function actingUser() {
+  if (cfg.mode !== 'admin') return '';   // user mode always acts as itself
   const v = $('actAsUser') && $('actAsUser').value;
   return v || '';
+}
+function randHex(bytes) {
+  const a = new Uint8Array(bytes);
+  crypto.getRandomValues(a);
+  return Array.from(a).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 function toast(msg, kind) {
   const t = $('toast');
@@ -67,7 +100,7 @@ function toast(msg, kind) {
   t.className = 'toast' + (kind ? ' ' + kind : '');
   t.hidden = false;
   clearTimeout(toast._t);
-  toast._t = setTimeout(() => { t.hidden = true; }, 4200);
+  toast._t = setTimeout(() => { t.hidden = true; }, 4500);
 }
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"]/g, (c) =>
@@ -83,63 +116,124 @@ async function withBtn(btn, fn) {
 
 // ─── caches ────────────────────────────────────────────────────────────
 let categoriesCache = [];
-
 async function loadCategories() {
   const data = await apiGet('/categories.json?include_subcategories=true');
   categoriesCache = (data.category_list && data.category_list.categories) || [];
-  // populate category selects
-  const opts = categoriesCache
-    .map((c) => `<option value="${c.id}">${esc(c.name)}</option>`)
-    .join('');
+  const opts = categoriesCache.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
   $('topicCategory').innerHTML = opts;
   $('feedCategory').innerHTML =
     '<option value="">All categories</option>' +
     categoriesCache.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
   return categoriesCache;
 }
-
 async function loadUsers() {
-  // admin list of active users → populate "act as" selector
+  if (cfg.mode !== 'admin') return [];   // listing users is admin-only
   const data = await apiGet('/admin/users/list/active.json?order=created&asc=false');
   const sel = $('actAsUser');
   const current = sel.value;
   const users = Array.isArray(data) ? data : [];
   sel.innerHTML =
     '<option value="">— admin (default) —</option>' +
-    users
-      .filter((u) => u.username)
+    users.filter((u) => u.username)
       .map((u) => `<option value="${esc(u.username)}">${esc(u.username)}${u.name ? ' — ' + esc(u.name) : ''}</option>`)
       .join('');
   if (current) sel.value = current;
   return users;
 }
+const catById = (id) => categoriesCache.find((c) => String(c.id) === String(id));
 
-function catById(id) {
-  return categoriesCache.find((c) => String(c.id) === String(id));
+// ─── role detection + UI gating ────────────────────────────────────────
+async function detectRole() {
+  // /session/current.json returns the acting user (admin Api-Username, or the
+  // user-api-key's owner). Tells us admin/moderator flags.
+  try {
+    const data = await apiGet('/session/current.json');
+    const u = (data && data.current_user) || {};
+    cfg.username = u.username || cfg.username;
+    cfg.isAdmin = !!u.admin;
+    cfg.isMod = !!u.moderator;
+  } catch (_) {
+    // user-api-key may lack session_info scope; fall back to mode assumption
+    cfg.isAdmin = cfg.mode === 'admin';
+    cfg.isMod = cfg.isAdmin;
+  }
+}
+function applyRole() {
+  const isAdmin = cfg.isAdmin;
+  document.querySelectorAll('.admin-only').forEach((el) => { el.hidden = !isAdmin; });
+  // if a hidden admin tab was active, fall back to Browse
+  const active = document.querySelector('.tab.active');
+  if (active && active.classList.contains('admin-only') && !isAdmin) switchTab('feed');
+
+  const badge = $('roleBadge');
+  if (connected()) {
+    const role = isAdmin ? 'admin' : (cfg.isMod ? 'moderator' : 'member');
+    badge.hidden = false;
+    badge.textContent = `${cfg.username || '?'} · ${role}`;
+    badge.className = 'pill ' + (isAdmin ? 'pill-ok' : 'pill-muted');
+  } else {
+    badge.hidden = true;
+  }
+  const who = isAdmin ? 'the Acting-as user' : 'you (' + (cfg.username || 'connected user') + ')';
+  $('topicAs').textContent = 'Posted as ' + who + '.';
+  $('replyAs').textContent = 'Posted as ' + who + '.';
 }
 
-// ─── connection ────────────────────────────────────────────────────────
+// ─── connection lifecycle ──────────────────────────────────────────────
 function setConn(ok, label) {
   const el = $('connStatus');
   el.textContent = label;
   el.className = 'pill ' + (ok ? 'pill-ok' : 'pill-bad');
 }
-
-async function testConnection() {
-  const data = await apiGet('/categories.json');
-  return data;
-}
-
 async function refreshAll() {
-  if (!configured()) { setConn(false, 'Not connected'); return; }
+  if (!connected()) { setConn(false, 'Not connected'); applyRole(); return; }
   try {
+    await detectRole();
     await loadCategories();
     setConn(true, 'Connected · ' + cfg.url.replace(/^https?:\/\//, ''));
-    try { await loadUsers(); } catch (_) { /* non-admin keys still post fine */ }
+    applyRole();
+    if (cfg.isAdmin) { try { await loadUsers(); } catch (_) {} }
   } catch (e) {
     setConn(false, 'Connection failed');
     toast('Connection failed: ' + e.message, 'bad');
   }
+}
+
+// ─── User-API-Key handshake (paste-back variant) ───────────────────────
+// Avoids per-forum redirect whitelisting: Discourse displays an encrypted
+// code, the user pastes it back, we decrypt with the private key we made.
+let _keypair = null;     // { priv, pub }  PEM strings
+let _nonce = '';
+
+function buildAuthUrl() {
+  const base = cfg.url.replace(/\/$/, '');
+  if (!base) throw new Error('Enter the Discourse URL first.');
+  const crypt = new JSEncrypt({ default_key_size: 2048 });
+  crypt.getKey();
+  _keypair = { priv: crypt.getPrivateKey(), pub: crypt.getPublicKey() };
+  _nonce = randHex(16);
+  if (!cfg.clientId) cfg.clientId = randHex(16);
+  const params = new URLSearchParams({
+    application_name: 'Marketing Console',
+    client_id: cfg.clientId,
+    scopes: 'session_info,read,write,notifications',
+    public_key: _keypair.pub,
+    nonce: _nonce,
+  });
+  return base + '/user-api-key/new?' + params.toString();
+}
+
+function decryptPayload(payloadB64) {
+  if (!_keypair) throw new Error('Generate the authorization link first (step 1).');
+  const crypt = new JSEncrypt();
+  crypt.setPrivateKey(_keypair.priv);
+  const json = crypt.decrypt(payloadB64.trim().replace(/\s+/g, ''));
+  if (!json) throw new Error('Could not decrypt — wrong code, or link was regenerated after copying.');
+  let obj;
+  try { obj = JSON.parse(json); } catch (_) { throw new Error('Decrypted payload is not valid JSON.'); }
+  if (obj.nonce !== _nonce) throw new Error('Nonce mismatch — possible tampering. Restart the handshake.');
+  if (!obj.key) throw new Error('No key in payload.');
+  return obj.key;
 }
 
 // ─── BROWSE ────────────────────────────────────────────────────────────
@@ -160,12 +254,8 @@ async function loadFeed() {
     return;
   }
 
-  // latest topics
   let path = '/latest.json?order=created';
-  if (catId) {
-    const c = catById(catId);
-    if (c) path = `/c/${c.slug}/${c.id}.json`;
-  }
+  if (catId) { const c = catById(catId); if (c) path = `/c/${c.slug}/${c.id}.json`; }
   const data = await apiGet(path);
   const topics = (data.topic_list && data.topic_list.topics) || [];
   if (!topics.length) { list.innerHTML = '<p class="muted">No topics.</p>'; return; }
@@ -223,7 +313,6 @@ async function loadTopicPreview() {
     box.classList.add('show');
   }
 }
-
 async function submitReply() {
   const topic_id = Number($('replyTopicId').value);
   const raw = $('replyBody').value.trim();
@@ -236,7 +325,7 @@ async function submitReply() {
   $('replyBody').value = '';
 }
 
-// ─── CATEGORY ──────────────────────────────────────────────────────────
+// ─── CATEGORY (admin) ──────────────────────────────────────────────────
 async function submitCategory() {
   const name = $('catName').value.trim();
   if (!name) { toast('Name required.', 'bad'); return; }
@@ -250,16 +339,13 @@ async function submitCategory() {
   const desc = $('catDesc').value.trim();
   const data = await apiPost('/categories.json', body);
   const catId = data.category && data.category.id;
-  // description on a category = the body of its definition topic; set via PUT
-  if (desc && catId) {
-    try { await apiPut(`/categories/${catId}.json`, { ...body, description: desc }); } catch (_) {}
-  }
+  if (desc && catId) { try { await apiPut(`/categories/${catId}.json`, { ...body, description: desc }); } catch (_) {} }
   toast(`Category created — id ${catId}`, 'ok');
   $('catName').value = ''; $('catSlug').value = ''; $('catDesc').value = '';
   await loadCategories();
 }
 
-// ─── NEW USER ──────────────────────────────────────────────────────────
+// ─── NEW USER (admin) ──────────────────────────────────────────────────
 async function submitUser() {
   const name = $('userName').value.trim();
   const username = $('userUsername').value.trim();
@@ -267,13 +353,9 @@ async function submitUser() {
   const password = $('userPassword').value;
   const bio = $('userBio').value.trim();
   if (!username || !email || !password) { toast('Username, email, password required.', 'bad'); return; }
-  const data = await apiPost('/users.json', {
-    name, username, email, password, active: true, approved: true,
-  });
+  const data = await apiPost('/users.json', { name, username, email, password, active: true, approved: true });
   if (data && data.success === false) throw new Error(data.message || 'User creation failed');
-  if (bio) {
-    try { await apiPut(`/u/${username}.json`, { bio_raw: bio, username }); } catch (_) {}
-  }
+  if (bio) { try { await apiPut(`/u/${username}.json`, { bio_raw: bio, username }); } catch (_) {} }
   toast(`User created — ${username}`, 'ok');
   $('userName').value = ''; $('userUsername').value = ''; $('userEmail').value = ''; $('userBio').value = '';
   try { await loadUsers(); } catch (_) {}
@@ -301,7 +383,6 @@ async function submitLike() {
   await apiPost('/post_actions.json', { id, post_action_type_id: 2 });
   toast(`Liked post ${id}`, 'ok');
 }
-
 async function loadPostRaw() {
   const id = $('editPostId').value;
   if (!id) { toast('Post ID required.', 'bad'); return; }
@@ -309,7 +390,6 @@ async function loadPostRaw() {
   $('editPostBody').value = data.raw || '';
   toast('Loaded current text.', 'ok');
 }
-
 async function submitEdit() {
   const id = Number($('editPostId').value);
   const raw = $('editPostBody').value;
@@ -317,32 +397,35 @@ async function submitEdit() {
   await apiPut(`/posts/${id}.json`, { post: { raw } });
   toast(`Post ${id} updated`, 'ok');
 }
-
 async function submitDelete() {
   const id = Number($('deletePostId').value);
   if (!id) { toast('Post ID required.', 'bad'); return; }
   if (!confirm(`Delete post ${id}? This cannot be undone from here.`)) return;
-  await apiDelete(`/posts/${id}.json`, { context: 'Colab Console' });
+  await apiDelete(`/posts/${id}.json`, { context: 'Marketing Console' });
   toast(`Deleted post ${id}`, 'ok');
 }
 
 // ─── tabs ──────────────────────────────────────────────────────────────
 function switchTab(name) {
-  document.querySelectorAll('.tab').forEach((t) =>
-    t.classList.toggle('active', t.dataset.tab === name));
-  document.querySelectorAll('.panel').forEach((p) =>
-    p.classList.toggle('active', p.id === 'tab-' + name));
+  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('active', p.id === 'tab-' + name));
 }
 
-// ─── settings modal ────────────────────────────────────────────────────
+// ─── connection modal ──────────────────────────────────────────────────
 function openSettings() {
   $('cfgUrl').value = cfg.url;
   $('cfgKey').value = cfg.key;
   $('cfgAdmin').value = cfg.admin;
+  $('cfgRemember').checked = cfg.remember;
   $('testResult').textContent = '';
+  $('disconnectBtn').hidden = !connected();
   $('settingsModal').hidden = false;
 }
 function closeSettings() { $('settingsModal').hidden = true; }
+function switchMethod(m) {
+  document.querySelectorAll('.mtab').forEach((b) => b.classList.toggle('active', b.dataset.method === m));
+  document.querySelectorAll('.method').forEach((p) => p.classList.toggle('active', p.id === 'method-' + m));
+}
 
 // ─── wire up ───────────────────────────────────────────────────────────
 function init() {
@@ -350,32 +433,79 @@ function init() {
 
   document.querySelectorAll('.tab').forEach((t) =>
     t.addEventListener('click', () => switchTab(t.dataset.tab)));
+  document.querySelectorAll('.mtab').forEach((b) =>
+    b.addEventListener('click', () => switchMethod(b.dataset.method)));
 
   $('openSettings').addEventListener('click', openSettings);
   $('closeSettings').addEventListener('click', closeSettings);
-  $('saveSettings').addEventListener('click', () => {
-    cfg.url = $('cfgUrl').value.trim();
-    cfg.key = $('cfgKey').value.trim();
-    cfg.admin = $('cfgAdmin').value.trim();
-    saveCfg();
+
+  $('disconnectBtn').addEventListener('click', () => {
+    clearCfg();
+    setConn(false, 'Not connected');
+    applyRole();
     closeSettings();
-    refreshAll();
+    toast('Disconnected and cleared.', 'ok');
   });
+
+  // Admin key connect
+  $('connectAdmin').addEventListener('click', function () {
+    withBtn(this, async () => {
+      cfg.mode = 'admin';
+      cfg.url = $('cfgUrl').value.trim();
+      cfg.key = $('cfgKey').value.trim();
+      cfg.admin = $('cfgAdmin').value.trim() || 'system';
+      cfg.remember = $('cfgRemember').checked;
+      if (!cfg.url || !cfg.key) throw new Error('URL and admin key required.');
+      await detectRole();
+      persist();
+      closeSettings();
+      await refreshAll();
+      toast('Connected as admin.', 'ok');
+    });
+  });
+
   $('testConn').addEventListener('click', function () {
     const prev = { ...cfg };
+    cfg.mode = 'admin';
     cfg.url = $('cfgUrl').value.trim();
     cfg.key = $('cfgKey').value.trim();
-    cfg.admin = $('cfgAdmin').value.trim();
+    cfg.admin = $('cfgAdmin').value.trim() || 'system';
     $('testResult').textContent = 'Testing…';
-    testConnection()
-      .then(() => { $('testResult').textContent = '✅ Connected'; })
+    apiGet('/categories.json')
+      .then(() => { $('testResult').textContent = '✅ Connected'; Object.assign(cfg, prev); })
       .catch((e) => { $('testResult').textContent = '❌ ' + e.message; Object.assign(cfg, prev); });
   });
 
-  $('refreshUsers').addEventListener('click', function () {
-    withBtn(this, loadUsers);
+  // User-API-Key handshake
+  $('genAuthLink').addEventListener('click', function () {
+    withBtn(this, async () => {
+      cfg.url = $('cfgUrl').value.trim();
+      const url = buildAuthUrl();
+      window.open(url, '_blank', 'noopener');
+      $('authHint').style.display = 'block';
+      toast('Authorization page opened. Approve, copy the code, paste it below.', 'ok');
+    });
+  });
+  $('connectAccount').addEventListener('click', function () {
+    withBtn(this, async () => {
+      cfg.url = $('cfgUrl').value.trim();
+      const payload = $('userApiPayload').value;
+      if (!cfg.url) throw new Error('Enter the Discourse URL first.');
+      if (!payload.trim()) throw new Error('Paste the authorization code first.');
+      const key = decryptPayload(payload);
+      cfg.mode = 'user';
+      cfg.userApiKey = key;
+      cfg.remember = $('cfgRemember').checked;
+      await detectRole();
+      persist();
+      $('userApiPayload').value = '';
+      closeSettings();
+      await refreshAll();
+      toast('Connected as ' + (cfg.username || 'member') + '.', 'ok');
+    });
   });
 
+  $('refreshUsers').addEventListener('click', function () { withBtn(this, loadUsers); });
   $('loadFeed').addEventListener('click', function () { withBtn(this, loadFeed); });
   $('submitTopic').addEventListener('click', function () { withBtn(this, submitTopic); });
   $('loadTopicPreview').addEventListener('click', function () { withBtn(this, loadTopicPreview); });
@@ -388,8 +518,9 @@ function init() {
   $('submitEdit').addEventListener('click', function () { withBtn(this, submitEdit); });
   $('submitDelete').addEventListener('click', function () { withBtn(this, submitDelete); });
 
-  if (configured()) refreshAll();
-  else { openSettings(); }
+  applyRole();
+  if (connected()) refreshAll();
+  else openSettings();
 }
 
 document.addEventListener('DOMContentLoaded', init);

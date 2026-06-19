@@ -119,4 +119,17 @@ select { cursor: pointer; }
 .toast.ok { border-color: var(--ok); }
 .toast.bad { border-color: var(--danger); }
 
+/* Connection-method tabs in modal */
+.methodtabs { display: flex; gap: 4px; margin: 4px 0 14px; border-bottom: 1px solid var(--line); }
+.mtab { background: none; border: none; color: var(--muted); padding: 8px 12px; cursor: pointer; border-bottom: 2px solid transparent; font: inherit; }
+.mtab:hover { color: var(--text); }
+.mtab.active { color: var(--text); border-bottom-color: var(--primary-2); }
+.method { display: none; }
+.method.active { display: block; }
+.method .btn { margin-bottom: 8px; }
+.remember { display: flex; align-items: center; gap: 8px; margin: 14px 0 4px; color: var(--muted); font-size: 13.5px; }
+.remember input { width: auto; }
+.tiny { font-size: 12px; margin-top: 12px; }
+.tiny a { color: var(--primary-2); }
+
 @media (max-width: 560px) { .grid2 { grid-template-columns: 1fr; } }

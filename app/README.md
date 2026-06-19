@@ -1,12 +1,33 @@
-# Colab Console — Discourse Marketing Toolkit
+# Discourse Marketing Console
 
-Static web app for the marketing team to operate the
-[colab.blend-ed.com](https://colab.blend-ed.com) Discourse forum via its API:
-pick any user to **act as**, then create topics, reply, create categories,
-create users, send messages, like / edit / delete posts, and browse the feed.
+Static web app to operate any Discourse forum via its API — for marketing /
+community teams. Create topics, reply, send messages, like/edit/delete posts,
+browse the feed and (as admin) create categories, create users, and post as any
+user. No build step, no backend — pure HTML/CSS/JS, deployable to GitHub Pages.
 
-It is the `discourse-seed.py` script's capabilities, plus more, as a clickable UI.
-No build step, no backend — pure HTML/CSS/JS, deployable to GitHub Pages.
+## Two ways to connect
+
+| Method | Who | What you can do | Setup |
+|---|---|---|---|
+| **My account (seamless)** | Any member | Post / reply / PM / like as **yourself**, edit/delete **your own** posts, browse | Discourse `allow user api keys` = true (default). One copy-paste handshake. |
+| **Admin API key** | Forum admin | Everything above **+ impersonate any user, create categories & users, moderate** | Global admin key from Admin → API |
+
+The app **detects your role on connect** and hides what your account can't do.
+Impersonating other users (the seed-script "post as dummy persona" feature) is an
+admin-only Discourse capability — a normal member's connection cannot do it, by
+design, no matter how you connect.
+
+### How the seamless handshake works
+1. App generates an RSA keypair in your browser.
+2. You're sent to `your-forum/user-api-key/new` (you're already logged in there)
+   and approve scoped access (`session_info, read, write, notifications`).
+3. Discourse shows an encrypted code. Paste it back into the app.
+4. App decrypts it locally → a scoped key bound to **your** account. Revoke any
+   time under your Discourse → Preferences → Security.
+
+No admin key, nothing pasted in plaintext, no per-forum redirect whitelist needed.
+(Decryption uses the bundled `vendor/jsencrypt.min.js`, MIT, pinned with SRI —
+browsers' built-in WebCrypto can't decrypt Discourse's PKCS1v15 payload.)
 
 ---
 
@@ -29,16 +50,26 @@ attributed to the selected user (same mechanism as the seed script's `as_user`).
 
 ## Security model — read this
 
-- The app needs an **admin global API key**. It is **pasted in Settings** and
-  stored **only in your browser** (`localStorage`). It is never committed and
-  never uploaded anywhere except direct requests to your Discourse instance.
-- **Do NOT hardcode the key into these files** and push to a public repo. Anyone
-  with the key has full admin over the forum.
-- Each marketing user enters the key in their own browser, or you keep the repo
-  private. Treat the key like a password — rotate it in Discourse admin if leaked.
+- **No backend.** Requests go straight from your browser to your Discourse.
+  Credentials never transit any server of ours. The app is static and open source
+  — audit it.
+- **Credentials stay in your browser.** `sessionStorage` by default (cleared when
+  the tab closes); tick "Remember on this device" to use `localStorage`. The
+  **Disconnect & clear** button wipes both.
+- **Prefer the seamless (User-API-Key) method** — it issues a scoped key bound to
+  one account, revocable from Discourse Preferences. Use the admin key only when
+  you genuinely need admin powers (impersonation, category/user creation). A
+  global admin key = full forum control; treat it like a root password and rotate
+  it (Admin → API → revoke + new key) if exposed.
+- **Hardened client:** Content-Security-Policy blocks inline/external scripts
+  (so an injection can't exfiltrate a key); the one vendored lib is pinned with
+  Subresource Integrity; zero CDN/runtime dependencies.
+- **Origin isolation:** `localStorage` is shared across all pages on one origin.
+  On `username.github.io` every repo shares it — host this on a **dedicated custom
+  domain** if multiple users will "remember" keys.
 
-> The key currently in `../discourse-seed.py` is committed in plaintext. Rotate
-> it (Admin → API → revoke + new key) before sharing that script or this repo.
+> The admin key once hardcoded in `../discourse-seed.py` has been moved to env
+> vars. If that key was ever committed or shared, **rotate it** in Discourse.
 
 ---
 
