@@ -9,13 +9,17 @@ user. No build step, no backend — pure HTML/CSS/JS, deployable to GitHub Pages
 
 | Method | Who | What you can do | Setup |
 |---|---|---|---|
-| **My account (seamless)** | Any member | Post / reply / PM / like as **yourself**, edit/delete **your own** posts, browse | Discourse `allow user api keys` = true (default). One copy-paste handshake. |
-| **Admin API key** | Forum admin | Everything above **+ impersonate any user, create categories & users, moderate** | Global admin key from Admin → API |
+| **My account** | Any member | Post / reply / PM / like as **yourself**, edit/delete **your own** posts, browse | Discourse `allow user api keys` = true (default). One copy-paste handshake. |
+| **Proxy (impersonate)** | Marketing team | Everything **+ impersonate any user, create categories & users, moderate** | Deploy the Cloudflare Worker in [`../worker/`](../worker/), then enter its URL + token. |
+| **Admin key** (direct) | — | Same as proxy, but ⚠ **blocked by standard Discourse CORS** (it disallows `Api-Key`/`Api-Username` headers from browsers) | Only works if you've widened your forum's allowed CORS headers. Use the proxy instead. |
 
 The app **detects your role on connect** and hides what your account can't do.
-Impersonating other users (the seed-script "post as dummy persona" feature) is an
-admin-only Discourse capability — a normal member's connection cannot do it, by
-design, no matter how you connect.
+
+**Why impersonation needs the proxy:** posting as another user requires the
+`Api-Username` header, which Discourse's CORS allowlist blocks for browsers (only
+`User-Api-Key` is allowed). The Worker injects that header server-side, so the
+admin key never touches the browser. A seamless (`User-Api-Key`) connection is
+cryptographically bound to one account and can never impersonate.
 
 ### How the seamless handshake works
 1. App generates an RSA keypair in your browser.

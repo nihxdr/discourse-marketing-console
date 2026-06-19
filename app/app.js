@@ -13,17 +13,22 @@
 const STORE_KEY = 'dmc_cfg';
 
 const cfg = {
-  mode: '',          // 'admin' | 'user'
-  url: '',
-  key: '',           // admin api key
+  mode: '',          // 'admin' | 'user' | 'proxy'
+  url: '',           // public Discourse URL (for links; API base in admin/user mode)
+  key: '',           // admin api key (admin mode)
   admin: '',         // admin username (admin mode)
   userApiKey: '',    // user-api-key (user mode)
+  proxyUrl: '',      // Cloudflare Worker URL (proxy mode)
+  proxyToken: '',    // shared proxy secret (proxy mode)
   username: '',      // resolved connected username
   isAdmin: false,
   isMod: false,
   clientId: '',      // stable per-device id for user-api-key revocation
   remember: false,
 };
+
+// proxy + direct-admin both carry admin powers (impersonation, listing users)
+const adminMode = () => cfg.mode === 'admin' || cfg.mode === 'proxy';
 
 // ─── storage ───────────────────────────────────────────────────────────
 function persist() {
@@ -41,22 +46,30 @@ function clearCfg() {
   sessionStorage.removeItem(STORE_KEY);
   localStorage.removeItem(STORE_KEY);
   Object.assign(cfg, {
-    mode: '', key: '', admin: '', userApiKey: '', username: '',
-    isAdmin: false, isMod: false,
+    mode: '', key: '', admin: '', userApiKey: '', proxyUrl: '', proxyToken: '',
+    username: '', isAdmin: false, isMod: false,
   });
 }
 function connected() {
-  return cfg.url && ((cfg.mode === 'admin' && cfg.key) || (cfg.mode === 'user' && cfg.userApiKey));
+  if (cfg.mode === 'proxy') return !!(cfg.proxyUrl && cfg.proxyToken);
+  if (cfg.mode === 'admin') return !!(cfg.url && cfg.key);
+  if (cfg.mode === 'user') return !!(cfg.url && cfg.userApiKey);
+  return false;
 }
+const apiBase = () => (cfg.mode === 'proxy' ? cfg.proxyUrl : cfg.url).replace(/\/$/, '');
 
 // ─── API core ──────────────────────────────────────────────────────────
 function headers(asUser) {
   const h = { 'Content-Type': 'application/json' };
-  if (cfg.mode === 'admin') {
+  if (cfg.mode === 'proxy') {
+    h['X-Proxy-Token'] = cfg.proxyToken;
+    const act = asUser || actingUser();
+    if (act) h['X-Act-As'] = act;          // Worker maps this to Api-Username
+  } else if (cfg.mode === 'admin') {
     h['Api-Key'] = cfg.key;
     h['Api-Username'] = asUser || actingUser() || cfg.admin || 'system';
   } else {
-    h['User-Api-Key'] = cfg.userApiKey;   // bound to the user; no impersonation
+    h['User-Api-Key'] = cfg.userApiKey;    // bound to the user; no impersonation
   }
   return h;
 }
@@ -65,7 +78,7 @@ async function api(method, path, body, asUser) {
   if (!connected()) throw new Error('Not connected — open Connection first.');
   const opts = { method, headers: headers(asUser) };
   if (body !== undefined) opts.body = JSON.stringify(body);
-  const res = await fetch(cfg.url.replace(/\/$/, '') + path, opts);
+  const res = await fetch(apiBase() + path, opts);
   const text = await res.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch (_) { data = text; }
@@ -85,7 +98,7 @@ const apiDelete = (p, b) => api('DELETE', p, b);
 // ─── helpers ───────────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id);
 function actingUser() {
-  if (cfg.mode !== 'admin') return '';   // user mode always acts as itself
+  if (!adminMode()) return '';   // user mode always acts as itself
   const v = $('actAsUser') && $('actAsUser').value;
   return v || '';
 }
@@ -127,7 +140,7 @@ async function loadCategories() {
   return categoriesCache;
 }
 async function loadUsers() {
-  if (cfg.mode !== 'admin') return [];   // listing users is admin-only
+  if (!adminMode()) return [];   // listing users is admin-only
   const data = await apiGet('/admin/users/list/active.json?order=created&asc=false');
   const sel = $('actAsUser');
   const current = sel.value;
@@ -154,16 +167,16 @@ async function detectRole() {
     cfg.isMod = !!u.moderator;
   } catch (_) {
     // user-api-key may lack session_info scope; fall back to mode assumption
-    cfg.isAdmin = cfg.mode === 'admin';
+    cfg.isAdmin = adminMode();
     cfg.isMod = cfg.isAdmin;
   }
 }
 function applyRole() {
   const isAdmin = cfg.isAdmin;
   document.querySelectorAll('.admin-only').forEach((el) => { el.hidden = !isAdmin; });
-  // Impersonation needs an ADMIN KEY (Api-Username header). A user-api-key, even
-  // for an admin account, can't impersonate — hide the Acting-as bar in user mode.
-  $('actbar').hidden = !(isAdmin && cfg.mode === 'admin');
+  // Impersonation needs Api-Username (admin key direct, or via the proxy). A
+  // user-api-key can't impersonate — hide the Acting-as bar in user mode.
+  $('actbar').hidden = !(isAdmin && adminMode());
   // if a hidden admin tab was active, fall back to Browse
   const active = document.querySelector('.tab.active');
   if (active && active.classList.contains('admin-only') && !isAdmin) switchTab('feed');
@@ -419,6 +432,8 @@ function openSettings() {
   $('cfgUrl').value = cfg.url;
   $('cfgKey').value = cfg.key;
   $('cfgAdmin').value = cfg.admin;
+  $('cfgProxyUrl').value = cfg.proxyUrl;
+  $('cfgProxyToken').value = cfg.proxyToken;
   $('cfgRemember').checked = cfg.remember;
   $('testResult').textContent = '';
   $('disconnectBtn').hidden = !connected();
@@ -464,6 +479,23 @@ function init() {
       closeSettings();
       await refreshAll();
       toast('Connected as admin.', 'ok');
+    });
+  });
+
+  // Proxy connect (impersonation via Cloudflare Worker)
+  $('connectProxy').addEventListener('click', function () {
+    withBtn(this, async () => {
+      cfg.mode = 'proxy';
+      cfg.url = $('cfgUrl').value.trim();          // public forum URL, for links
+      cfg.proxyUrl = $('cfgProxyUrl').value.trim();
+      cfg.proxyToken = $('cfgProxyToken').value.trim();
+      cfg.remember = $('cfgRemember').checked;
+      if (!cfg.proxyUrl || !cfg.proxyToken) throw new Error('Proxy URL and token required.');
+      await detectRole();
+      persist();
+      closeSettings();
+      await refreshAll();
+      toast('Connected via proxy.', 'ok');
     });
   });
 

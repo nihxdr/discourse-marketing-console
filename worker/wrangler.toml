@@ -1,0 +1,13 @@
+name = "discourse-proxy"
+main = "discourse-proxy.js"
+compatibility_date = "2024-11-01"
+
+# Non-secret vars. Edit ALLOWED_ORIGIN to match where the app is served.
+[vars]
+ALLOWED_ORIGIN = "https://nihxdr.github.io"
+DEFAULT_USERNAME = "system"
+
+# Secrets are NOT stored here. Set them once with:
+#   wrangler secret put DISCOURSE_URL
+#   wrangler secret put DISCOURSE_API_KEY
+#   wrangler secret put PROXY_TOKEN

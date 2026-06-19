@@ -215,8 +215,9 @@
         <a href="https://github.com/nihxdr/discourse-marketing-console#one-time-discourse-setup-cors" target="_blank" rel="noopener">README</a>.</p>
 
       <div class="methodtabs">
-        <button class="mtab active" data-method="account">My account (seamless)</button>
-        <button class="mtab" data-method="admin">Admin API key</button>
+        <button class="mtab active" data-method="account">My account</button>
+        <button class="mtab" data-method="proxy">Proxy (impersonate)</button>
+        <button class="mtab" data-method="admin">Admin key</button>
       </div>
 
       <!-- Account / User-API-Key method -->
@@ -234,10 +235,28 @@
         <button id="connectAccount" class="btn btn-primary">3 · Connect</button>
       </div>
 
-      <!-- Admin key method -->
+      <!-- Proxy method (impersonation via Cloudflare Worker) -->
+      <div class="method" id="method-proxy">
+        <p class="muted">Full power incl. <b>impersonating any user</b> &amp; creating
+          categories/users — without the admin key touching the browser. Requires the
+          Cloudflare Worker from <code>worker/</code> deployed once.
+          <a href="https://github.com/nihxdr/discourse-marketing-console/tree/main/worker" target="_blank" rel="noopener">Setup</a>.</p>
+        <div class="field">
+          <label>Proxy URL</label>
+          <input id="cfgProxyUrl" type="text" placeholder="https://discourse-proxy.you.workers.dev" />
+        </div>
+        <div class="field">
+          <label>Proxy token</label>
+          <input id="cfgProxyToken" type="password" placeholder="the PROXY_TOKEN you set" />
+        </div>
+        <button id="connectProxy" class="btn btn-primary">Connect</button>
+      </div>
+
+      <!-- Admin key method (direct; blocked by CORS on standard Discourse) -->
       <div class="method" id="method-admin">
-        <p class="muted">Full access incl. impersonation, category &amp; user creation.
-          Use a global admin key. Treat it like a root password.</p>
+        <p class="muted">Direct admin key in the browser. ⚠ <b>Standard Discourse blocks
+          this via CORS</b> (it disallows the Api-Key/Api-Username headers) — use the
+          Proxy tab instead unless you've widened your forum's allowed CORS headers.</p>
         <div class="field">
           <label>Admin API key</label>
           <input id="cfgKey" type="password" placeholder="Admin → API → global key" />
