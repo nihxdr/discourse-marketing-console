@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Colab Console — Discourse Marketing Tool</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="dot"></span>
+      <strong>Colab Console</strong>
+      <span class="sub">Discourse marketing toolkit</span>
+    </div>
+    <div class="topbar-right">
+      <span id="connStatus" class="pill pill-muted">Not connected</span>
+      <button id="openSettings" class="btn btn-ghost">⚙ Settings</button>
+    </div>
+  </header>
+
+  <!-- Acting-as bar -->
+  <div class="actbar" id="actbar">
+    <label>Acting as</label>
+    <select id="actAsUser"><option value="">— admin (default) —</option></select>
+    <button id="refreshUsers" class="btn btn-ghost btn-sm">↻ users</button>
+    <span class="actbar-hint">Posts, replies & likes are attributed to this user.</span>
+  </div>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-tab="feed">Browse</button>
+    <button class="tab" data-tab="topic">New Topic</button>
+    <button class="tab" data-tab="reply">Reply</button>
+    <button class="tab" data-tab="category">Category</button>
+    <button class="tab" data-tab="user">New User</button>
+    <button class="tab" data-tab="message">Message</button>
+    <button class="tab" data-tab="moderate">Moderate</button>
+  </nav>
+
+  <main class="wrap">
+
+    <!-- BROWSE -->
+    <section class="panel active" id="tab-feed">
+      <div class="row">
+        <h2>Browse community</h2>
+        <div class="row-actions">
+          <select id="feedScope">
+            <option value="latest">Latest</option>
+            <option value="categories">Categories</option>
+          </select>
+          <select id="feedCategory"><option value="">All categories</option></select>
+          <button id="loadFeed" class="btn">Load</button>
+        </div>
+      </div>
+      <div id="feedList" class="list"></div>
+    </section>
+
+    <!-- NEW TOPIC -->
+    <section class="panel" id="tab-topic">
+      <h2>Create a topic</h2>
+      <p class="muted">Posted as the <em>Acting as</em> user.</p>
+      <div class="field">
+        <label>Category</label>
+        <select id="topicCategory"></select>
+      </div>
+      <div class="field">
+        <label>Title</label>
+        <input id="topicTitle" type="text" placeholder="Topic title (min 15 chars by default)" />
+      </div>
+      <div class="field">
+        <label>Body (Markdown)</label>
+        <textarea id="topicBody" rows="9" placeholder="Write the post…"></textarea>
+      </div>
+      <button id="submitTopic" class="btn btn-primary">Post topic</button>
+    </section>
+
+    <!-- REPLY -->
+    <section class="panel" id="tab-reply">
+      <h2>Reply to a topic</h2>
+      <p class="muted">Posted as the <em>Acting as</em> user.</p>
+      <div class="field">
+        <label>Topic ID</label>
+        <input id="replyTopicId" type="number" placeholder="e.g. 683" />
+        <button id="loadTopicPreview" class="btn btn-ghost btn-sm">Preview topic</button>
+      </div>
+      <div id="replyPreview" class="preview"></div>
+      <div class="field">
+        <label>Reply to post # (optional)</label>
+        <input id="replyToPostNumber" type="number" placeholder="reply within thread" />
+      </div>
+      <div class="field">
+        <label>Body (Markdown)</label>
+        <textarea id="replyBody" rows="7" placeholder="Write the reply…"></textarea>
+      </div>
+      <button id="submitReply" class="btn btn-primary">Post reply</button>
+    </section>
+
+    <!-- CATEGORY -->
+    <section class="panel" id="tab-category">
+      <h2>Create a category</h2>
+      <div class="field">
+        <label>Name</label>
+        <input id="catName" type="text" placeholder="Category name" />
+      </div>
+      <div class="grid2">
+        <div class="field">
+          <label>Color (hex, no #)</label>
+          <input id="catColor" type="text" value="3358F2" />
+        </div>
+        <div class="field">
+          <label>Text color (hex, no #)</label>
+          <input id="catTextColor" type="text" value="FFFFFF" />
+        </div>
+      </div>
+      <div class="field">
+        <label>Slug (optional)</label>
+        <input id="catSlug" type="text" placeholder="auto from name if blank" />
+      </div>
+      <div class="field">
+        <label>Description (optional)</label>
+        <textarea id="catDesc" rows="3"></textarea>
+      </div>
+      <button id="submitCategory" class="btn btn-primary">Create category</button>
+    </section>
+
+    <!-- NEW USER -->
+    <section class="panel" id="tab-user">
+      <h2>Create a user</h2>
+      <p class="muted">Created active &amp; approved. Use for new personas.</p>
+      <div class="grid2">
+        <div class="field"><label>Name</label><input id="userName" type="text" /></div>
+        <div class="field"><label>Username</label><input id="userUsername" type="text" /></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Email</label><input id="userEmail" type="email" /></div>
+        <div class="field"><label>Password</label><input id="userPassword" type="text" value="Discourse2024!Seed" /></div>
+      </div>
+      <div class="field">
+        <label>Bio (optional)</label>
+        <textarea id="userBio" rows="3"></textarea>
+      </div>
+      <button id="submitUser" class="btn btn-primary">Create user</button>
+    </section>
+
+    <!-- MESSAGE -->
+    <section class="panel" id="tab-message">
+      <h2>Send a private message</h2>
+      <p class="muted">Sent as the <em>Acting as</em> user.</p>
+      <div class="field">
+        <label>Recipients (comma-separated usernames)</label>
+        <input id="msgRecipients" type="text" placeholder="lydia_chen, klara_novak" />
+      </div>
+      <div class="field">
+        <label>Subject</label>
+        <input id="msgTitle" type="text" />
+      </div>
+      <div class="field">
+        <label>Body (Markdown)</label>
+        <textarea id="msgBody" rows="6"></textarea>
+      </div>
+      <button id="submitMessage" class="btn btn-primary">Send message</button>
+    </section>
+
+    <!-- MODERATE -->
+    <section class="panel" id="tab-moderate">
+      <h2>Moderate &amp; engage</h2>
+      <div class="card">
+        <h3>Like a post</h3>
+        <div class="field inline">
+          <input id="likePostId" type="number" placeholder="Post ID" />
+          <button id="submitLike" class="btn">♥ Like</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Edit a post</h3>
+        <div class="field"><label>Post ID</label>
+          <input id="editPostId" type="number" placeholder="Post ID" />
+          <button id="loadPostRaw" class="btn btn-ghost btn-sm">Load current text</button>
+        </div>
+        <div class="field"><label>New body (Markdown)</label>
+          <textarea id="editPostBody" rows="5"></textarea>
+        </div>
+        <button id="submitEdit" class="btn">Save edit</button>
+      </div>
+      <div class="card danger">
+        <h3>Delete a post</h3>
+        <p class="muted">Deletes a single post by ID. Deleting the first post of a topic removes the topic.</p>
+        <div class="field inline">
+          <input id="deletePostId" type="number" placeholder="Post ID" />
+          <button id="submitDelete" class="btn btn-danger">Delete</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Settings modal -->
+  <div class="modal-backdrop" id="settingsModal" hidden>
+    <div class="modal">
+      <h2>Connection settings</h2>
+      <div class="field">
+        <label>Discourse URL</label>
+        <input id="cfgUrl" type="text" placeholder="https://colab.blend-ed.com" />
+      </div>
+      <div class="field">
+        <label>Admin API key</label>
+        <input id="cfgKey" type="password" placeholder="Admin → API → global key" />
+        <small class="muted">Stored only in this browser (localStorage). Never uploaded.</small>
+      </div>
+      <div class="field">
+        <label>Admin username</label>
+        <input id="cfgAdmin" type="text" placeholder="nihxdr" />
+      </div>
+      <div class="modal-actions">
+        <button id="testConn" class="btn btn-ghost">Test connection</button>
+        <span id="testResult" class="muted"></span>
+      </div>
+      <div class="modal-actions end">
+        <button id="closeSettings" class="btn btn-ghost">Close</button>
+        <button id="saveSettings" class="btn btn-primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

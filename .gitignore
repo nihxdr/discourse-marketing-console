@@ -1,0 +1,15 @@
+# Secrets
+.env
+
+# Seed run output (contains instance URL + created IDs)
+created_content.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+*.swp
