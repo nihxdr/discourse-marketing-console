@@ -75,20 +75,39 @@ attributed to the selected user (same mechanism as the seed script's `as_user`).
 
 ## One-time Discourse setup (CORS)
 
-Because the app runs in the browser on a different origin than the forum,
-Discourse must allow cross-origin API calls. **Admin → Settings → search "cors":**
+The app runs in the browser on a different origin than the forum, so Discourse
+must allow cross-origin API calls or every request fails.
 
-1. Enable **`enable_cors`** (checkbox) — `true`.
-2. **`cors_origins`** — add the exact origin the app is served from, one per line:
-   - GitHub Pages: `https://<username>.github.io`
-   - Custom domain later: `https://tools.blend-ed.com`
-   - Local testing: `http://localhost:8000`
-3. Save, then **rebuild/restart** if self-hosted
-   (`./launcher rebuild app`) — some Discourse hosts require the env var
-   `DISCOURSE_ENABLE_CORS: true` and `DISCOURSE_CORS_ORIGIN` in `app.yml`.
+### Standard Docker install (recommended)
 
-If a request fails with a CORS error in the browser console, the origin isn't in
-`cors_origins`. Use the **Test connection** button in Settings to verify.
+SSH to the server, edit `containers/app.yml`, add under `env:`:
+
+```yaml
+env:
+  DISCOURSE_ENABLE_CORS: true
+  DISCOURSE_CORS_ORIGIN: 'https://nihxdr.github.io'
+```
+
+Then rebuild (required — env vars apply only on rebuild):
+
+```bash
+cd /var/discourse
+./launcher rebuild app
+```
+
+- `DISCOURSE_CORS_ORIGIN`: exact `scheme://host`, **no trailing slash, no path**.
+- Multiple origins: comma-separated, **no spaces** —
+  `'https://nihxdr.github.io,https://tools.blend-ed.com'`.
+- When set via env var, the admin-UI `cors_origins` setting is locked — manage
+  origins in `app.yml`.
+
+### Managed / non-Docker hosts
+
+If you can't edit `app.yml`, use **Admin → Settings → search "cors"**: enable
+`enable_cors` and add the origin(s) to `cors_origins` (one per line).
+
+If a request fails with `No 'Access-Control-Allow-Origin'` in the browser
+console, the origin isn't allowed. Use **Test connection** to verify.
 
 ---
 

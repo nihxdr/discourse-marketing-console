@@ -13,6 +13,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }  /* beat class display rules (.modal-backdrop, .actbar) */
 html, body { margin: 0; }
 body {
   background: var(--bg);
@@ -131,5 +132,7 @@ select { cursor: pointer; }
 .remember input { width: auto; }
 .tiny { font-size: 12px; margin-top: 12px; }
 .tiny a { color: var(--primary-2); }
+.callout { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; margin: 0 0 14px; line-height: 1.45; }
+.callout code { background: rgba(255,255,255,.06); padding: 1px 5px; border-radius: 4px; font-size: 11.5px; }
 
 @media (max-width: 560px) { .grid2 { grid-template-columns: 1fr; } }

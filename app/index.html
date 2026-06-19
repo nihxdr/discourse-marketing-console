@@ -208,6 +208,12 @@
         <input id="cfgUrl" type="text" placeholder="https://your-forum.com" />
       </div>
 
+      <p class="muted tiny callout">⚠ First time? Your Discourse must allow this
+        origin (CORS), or requests fail. Admin sets <code>DISCOURSE_ENABLE_CORS: true</code>
+        and adds <code>DISCOURSE_CORS_ORIGIN: https://nihxdr.github.io</code> in
+        <code>app.yml</code>, then <code>./launcher rebuild app</code>. Details in the
+        <a href="https://github.com/nihxdr/discourse-marketing-console#one-time-discourse-setup-cors" target="_blank" rel="noopener">README</a>.</p>
+
       <div class="methodtabs">
         <button class="mtab active" data-method="account">My account (seamless)</button>
         <button class="mtab" data-method="admin">Admin API key</button>
