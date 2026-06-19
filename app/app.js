@@ -161,6 +161,9 @@ async function detectRole() {
 function applyRole() {
   const isAdmin = cfg.isAdmin;
   document.querySelectorAll('.admin-only').forEach((el) => { el.hidden = !isAdmin; });
+  // Impersonation needs an ADMIN KEY (Api-Username header). A user-api-key, even
+  // for an admin account, can't impersonate — hide the Acting-as bar in user mode.
+  $('actbar').hidden = !(isAdmin && cfg.mode === 'admin');
   // if a hidden admin tab was active, fall back to Browse
   const active = document.querySelector('.tab.active');
   if (active && active.classList.contains('admin-only') && !isAdmin) switchTab('feed');
