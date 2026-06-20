@@ -35,6 +35,27 @@ browsers' built-in WebCrypto can't decrypt Discourse's PKCS1v15 payload.)
 
 ---
 
+## Backdating posts (custom timestamp)
+
+To build a realistic-looking thread, New Topic and Reply each have an optional
+**Post date/time** picker. Leave it blank to post now; set it to backdate.
+
+- The picker appears **only in admin/proxy mode**. Discourse honours a post's
+  `created_at` only for staff-level (global admin key) API requests — a seamless
+  `User-Api-Key` (normal member) connection can't backdate, so the field is hidden.
+- The chosen local date/time is converted to UTC ISO-8601 and sent as `created_at`
+  on `POST /posts.json`. The success toast echoes the applied timestamp.
+- **Order matters for realism:** post the topic first, then each reply with a
+  time *after* the topic and after the previous reply — same increasing-gap
+  pattern the `discourse-seed.py` script used with its `delay` values.
+
+**Verify once:** post a throwaway backdated topic, confirm the forum shows your
+date (not "now"), then delete it via the Moderate tab. If it shows "now", this
+forum gates `created_at` differently — the fallback is the admin
+`PUT /t/{id}/change-timestamp` endpoint, which shifts a whole topic.
+
+---
+
 ## What it does
 
 | Tab | Action | Discourse API |
