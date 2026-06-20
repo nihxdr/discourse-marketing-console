@@ -75,6 +75,11 @@
         <label>Body (Markdown)</label>
         <textarea id="topicBody" rows="9" placeholder="Write the post…"></textarea>
       </div>
+      <div class="field backdate-field" hidden>
+        <label>Post date/time (optional — backdate)</label>
+        <input id="topicCreatedAt" type="datetime-local" />
+        <small class="muted">Leave blank to post now. Backdating needs an admin/proxy connection.</small>
+      </div>
       <button id="submitTopic" class="btn btn-primary">Post topic</button>
     </section>
 
@@ -95,6 +100,11 @@
       <div class="field">
         <label>Body (Markdown)</label>
         <textarea id="replyBody" rows="7" placeholder="Write the reply…"></textarea>
+      </div>
+      <div class="field backdate-field" hidden>
+        <label>Reply date/time (optional — backdate)</label>
+        <input id="replyCreatedAt" type="datetime-local" />
+        <small class="muted">Leave blank to post now. Keep it after the topic &amp; earlier replies for a realistic thread.</small>
       </div>
       <button id="submitReply" class="btn btn-primary">Post reply</button>
     </section>

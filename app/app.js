@@ -102,6 +102,12 @@ function actingUser() {
   const v = $('actAsUser') && $('actAsUser').value;
   return v || '';
 }
+function isoFromLocal(v) {
+  // datetime-local gives "YYYY-MM-DDTHH:mm" in local time → ISO8601 UTC
+  if (!v) return '';
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? '' : d.toISOString();
+}
 function randHex(bytes) {
   const a = new Uint8Array(bytes);
   crypto.getRandomValues(a);
@@ -177,6 +183,9 @@ function applyRole() {
   // Impersonation needs Api-Username (admin key direct, or via the proxy). A
   // user-api-key can't impersonate — hide the Acting-as bar in user mode.
   $('actbar').hidden = !(isAdmin && adminMode());
+  // Backdating posts needs a global admin key (proxy/admin mode) — Discourse
+  // only honours created_at for staff-level API requests.
+  document.querySelectorAll('.backdate-field').forEach((el) => { el.hidden = !adminMode(); });
   // if a hidden admin tab was active, fall back to Browse
   const active = document.querySelector('.tab.active');
   if (active && active.classList.contains('admin-only') && !isAdmin) switchTab('feed');
@@ -308,9 +317,12 @@ async function submitTopic() {
   const title = $('topicTitle').value.trim();
   const raw = $('topicBody').value.trim();
   if (!title || !raw) { toast('Title and body required.', 'bad'); return; }
-  const data = await apiPost('/posts.json', { title, raw, category: Number(category) });
-  toast(`Topic created — topic ${data.topic_id}, post ${data.id}`, 'ok');
-  $('topicTitle').value = ''; $('topicBody').value = '';
+  const body = { title, raw, category: Number(category) };
+  const when = isoFromLocal($('topicCreatedAt').value);
+  if (when) body.created_at = when;
+  const data = await apiPost('/posts.json', body);
+  toast(`Topic created — topic ${data.topic_id}, post ${data.id}${when ? ' @ ' + when : ''}`, 'ok');
+  $('topicTitle').value = ''; $('topicBody').value = ''; $('topicCreatedAt').value = '';
 }
 
 // ─── REPLY ─────────────────────────────────────────────────────────────
@@ -336,9 +348,11 @@ async function submitReply() {
   if (!topic_id || !raw) { toast('Topic ID and body required.', 'bad'); return; }
   const body = { topic_id, raw };
   if (replyTo) body.reply_to_post_number = Number(replyTo);
+  const when = isoFromLocal($('replyCreatedAt').value);
+  if (when) body.created_at = when;
   const data = await apiPost('/posts.json', body);
-  toast(`Reply posted — post ${data.id}`, 'ok');
-  $('replyBody').value = '';
+  toast(`Reply posted — post ${data.id}${when ? ' @ ' + when : ''}`, 'ok');
+  $('replyBody').value = ''; $('replyCreatedAt').value = '';
 }
 
 // ─── CATEGORY (admin) ──────────────────────────────────────────────────
