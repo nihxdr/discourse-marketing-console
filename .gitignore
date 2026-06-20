@@ -10,6 +10,14 @@ __pycache__/
 .venv/
 venv/
 
+# Node / wrangler
+node_modules/
+package-lock.json
+worker/package.json
+
 # OS / editor
 .DS_Store
 *.swp
+
+# Local-only seeder (contains seed-persona passwords)
+discourse-seed.py
