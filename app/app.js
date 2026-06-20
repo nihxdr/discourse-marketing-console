@@ -445,9 +445,20 @@ function switchMethod(m) {
   document.querySelectorAll('.method').forEach((p) => p.classList.toggle('active', p.id === 'method-' + m));
 }
 
+// ─── theme ─────────────────────────────────────────────────────────────
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  localStorage.setItem('dmc_theme', t);
+  const b = $('themeToggle');
+  if (b) b.textContent = t === 'light' ? '☀' : '🌙';
+}
+
 // ─── wire up ───────────────────────────────────────────────────────────
 function init() {
   loadCfg();
+  applyTheme(localStorage.getItem('dmc_theme') || 'light');
+  $('themeToggle').addEventListener('click', () =>
+    applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'));
 
   document.querySelectorAll('.tab').forEach((t) =>
     t.addEventListener('click', () => switchTab(t.dataset.tab)));

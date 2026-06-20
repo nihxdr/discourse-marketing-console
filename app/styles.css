@@ -12,6 +12,23 @@
   --radius: 10px;
 }
 
+:root[data-theme="light"] {
+  --bg: #f4f6fa;
+  --panel: #ffffff;
+  --panel-2: #eef1f7;
+  --line: #d9dfea;
+  --text: #1b2435;
+  --muted: #5d6884;
+  --primary: #3358F2;
+  --primary-2: #2746d6;
+  --danger: #d22d32;
+  --ok: #1f9d57;
+}
+:root[data-theme="light"] .brand .dot { box-shadow: 0 0 10px rgba(51,88,242,.5); }
+:root[data-theme="light"] .callout code,
+:root[data-theme="light"] .tiny code { background: rgba(0,0,0,.06); }
+:root[data-theme="light"] .toast { box-shadow: 0 8px 30px rgba(20,30,60,.18); }
+
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }  /* beat class display rules (.modal-backdrop, .actbar) */
 html, body { margin: 0; }
